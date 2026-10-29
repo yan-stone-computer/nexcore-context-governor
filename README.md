@@ -7,6 +7,9 @@
 **Most agents truncate when context grows. This one budgets, degrades,
 checks what survived, and refuses before sending an impossible request.**
 
+> 四区块预算、固定顺序降级、可逆结构化压缩、关键事实探针和超限拒执，
+> 已从 NexcoreWork 中抽成不依赖模型供应商、可独立运行的 MIT 开源核心。
+
 This repository is the standalone, dependency-free context-governance core
 extracted from [NexcoreWork](https://github.com/yan-stone-computer/nexcorework-site).
 It is provider-independent TypeScript and uses only the Node.js standard
