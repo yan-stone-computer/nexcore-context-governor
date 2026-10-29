@@ -1,0 +1,42 @@
+{
+  "name": "nexcore-context-governor",
+  "version": "0.1.0",
+  "description": "Deterministic context budgeting and reversible compaction for long-running AI agents.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --test-force-exit test/*.test.ts",
+    "build": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "keywords": [
+    "ai-agent",
+    "context-engineering",
+    "context-window",
+    "compaction",
+    "llm",
+    "local-first"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "typescript": "5.9.3"
+  }
+}
