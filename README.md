@@ -1,101 +1,56 @@
 # Nexcore Context Governor
 
+### 长任务不是“窗口不够大”。  
+### 真正的问题是：超限时，谁决定先丢什么？
+
 [![test](https://github.com/yan-stone-computer/nexcore-context-governor/actions/workflows/test.yml/badge.svg)](https://github.com/yan-stone-computer/nexcore-context-governor/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0ea5a6.svg)](LICENSE)
-[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933.svg)](https://nodejs.org/)
-
-**Most agents truncate when context grows. This one budgets, degrades,
-checks what survived, and refuses before sending an impossible request.**
-
-> 四区块预算、固定顺序降级、可逆结构化压缩、关键事实探针和超限拒执，
-> 已从 NexcoreWork 中抽成不依赖模型供应商、可独立运行的 MIT 开源核心。
-
-This repository is the standalone, dependency-free context-governance core
-extracted from [NexcoreWork](https://github.com/yan-stone-computer/nexcorework-site).
-It is provider-independent TypeScript and uses only the Node.js standard
-library.
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933.svg)](https://nodejs.org/)
+[![Dependencies](https://img.shields.io/badge/runtime_dependencies-0-2563eb.svg)](package.json)
 
 ![Four-block context governance](docs/context-governor.svg)
 
-## Why this exists
+大多数 Agent 在上下文超限时直接截断。这个库会先预算、再降级、再核对关键事实，
+最后在请求不可能成功时明确拒绝执行。
 
-Long-running agents fail in predictable ways:
+Nexcore Context Governor 是从
+[NexcoreWork](https://github.com/yan-stone-computer/nexcorework-site) 抽出的
+provider-independent TypeScript 核心，不依赖模型 SDK。
 
-- one tool result can consume most of the window;
-- naïve history summaries silently lose paths, IDs, constraints, or decisions;
-- truncating the latest user input produces a request that looks valid but
-  cannot succeed;
-- safety instructions disappear when the middle of the prompt is rewritten.
+## 它和“自动摘要”有什么不同
 
-This package makes those failure modes explicit. It splits context into four
-blocks, measures them separately, applies a fixed degradation order, verifies
-retention with deterministic probes, and rejects the request when the latest
-input alone cannot fit.
+| 常见做法 | Nexcore Context Governor |
+|---|---|
+| 按轮次截断 | 四区块分别计量 |
+| 一次大摘要覆盖历史 | 固定顺序治理，可解释 |
+| 摘要是否丢事实碰运气 | 结构化保留清单与探针核对 |
+| 安全约束可能被裁掉 | 压缩后由系统重新注入末尾 |
+| 当前输入放不下也硬发 | 明确拒绝并报告各区块占用 |
+| 原文被摘要替代 | 只从当前视图移出，可按引用回读 |
 
-## Architecture
+## 治理顺序
 
 ```text
-system prefix + injected evidence + conversation history + current input
-      |                 |                  |                 |
-      +-----------------+------------------+-----------------+
-                              measure
-                                 |
-                   prune old tool results and arguments
-                                 |
-                    reversible structured compaction
-                                 |
-                         probe key facts
-                                 |
-                    shrink lower-priority injection
-                                 |
-                    refuse if still over budget
+固定前缀 / 注入层 / 会话历史 / 当前输入
+                  ↓
+             分区计量
+                  ↓
+    清理旧工具结果和超大参数
+                  ↓
+      结构化压缩较早会话
+                  ↓
+       关键事实探针核对
+                  ↓
+       重建末尾安全约束
+                  ↓
+     缩减低优先级注入
+                  ↓
+   仍超限则拒绝执行并说明原因
 ```
 
-### Four blocks
+治理顺序是确定的，不交给模型“自由发挥”。
 
-| Block | Typical content |
-| --- | --- |
-| `prefix` | Agent identity, safety rules, tool definitions |
-| `injection` | Retrieved knowledge, user memory, project memory, task canvas |
-| `session` | Older conversation turns |
-| `input` | The latest user turn and current tool results |
-
-The default context ceiling is 70% of the model window. This leaves room for
-reasoning and output rather than using the entire advertised limit.
-
-### Ordered degradation
-
-The pipeline is deterministic:
-
-1. clear old tool results and oversized call arguments, retaining receipts and
-   recoverable references;
-2. compact older session turns into a structured retention record;
-3. verify goals, facts, decisions, paths, constraints, and steps with probes;
-4. rebuild the safety block at the end of the injected context;
-5. shrink low-priority injection content;
-6. refuse execution with block-level numbers if the current input still does
-   not fit.
-
-No model call is required for budgeting or compaction. The algorithm is
-inspectable and testable without a provider.
-
-### Reversible compaction
-
-Compaction produces a stable record instead of an opaque summary:
-
-- task goals and acceptance criteria;
-- confirmed facts;
-- decisions and reasons;
-- open questions;
-- artifacts and paths;
-- completed tool steps;
-- user constraints and receipt references.
-
-The package mutates only the prompt view. Persisting the removed source messages
-is the caller's responsibility, and the generated record includes retrieval
-references for that purpose.
-
-## Quick start
+## 30 秒验证
 
 ```bash
 git clone https://github.com/yan-stone-computer/nexcore-context-governor.git
@@ -104,14 +59,16 @@ npm install
 npm run check
 ```
 
+5 项测试覆盖四区块计量、工具结果清理、固定降级顺序、安全约束回注和超限拒绝。
+
+## 最小用法
+
 ```ts
 import {
   DEFAULT_POLICY,
   govern,
   normalizePolicy,
 } from "nexcore-context-governor";
-
-const safety = "Workspace-only file access. Never invent tool results.";
 
 const result = govern({
   messages,
@@ -129,51 +86,38 @@ const result = govern({
 if (result.rejected) {
   return { error: result.rejected, report: result.report };
 }
-
-sendToModel(result.messages);
-persistCompaction(result.compaction);
 ```
 
-`messages` is the live prompt representation and may be rewritten by
-`govern()`. Keep your canonical conversation/event log separately.
+## 可观测输出
 
-## Observable output
+每次治理都会返回：
 
-Every result includes:
+- 四个区块的 token 占用与下钻条目；
+- 硬预算、溢出量和采用过的动作；
+- 清理了多少工具结果、释放多少 token；
+- 结构化保留清单和探针是否通过；
+- 当前安全约束是否仍在最后；
+- 拒绝时每个区块具体占了多少。
 
-- four block reports with token counts and drill-down entries;
-- the hard ceiling, overflow, cache mode, and degradation actions;
-- how many tool results were pruned and how much was freed;
-- the structured retention record and probe pass/fail result;
-- a final safety block and an explicit refusal message when needed.
+这让上下文治理能进入测试、轨迹和用户界面，而不是藏在框架内部。
 
-This makes context behavior suitable for tests, traces, and user-facing
-diagnostics instead of treating truncation as hidden infrastructure.
+## 设计边界
 
-## Scope and limits
+- token 数是确定性估算，不冒充供应商账单。
+- 压缩是规则驱动，不调用另一个模型写摘要。
+- 原文持久化、回执读取和最终模型适配由宿主负责。
+- 当前分类器面向常见 `system/user/assistant/tool` 消息格式。
 
-- Token counts are deterministic estimates, not provider billing records.
-- Compaction is rule-based and language-sensitive rather than an LLM summary.
-- The caller owns durable storage, receipt retrieval, and source retention.
-- The current project-region classifier follows the common
-  `system / user / assistant / tool` message format. Adapters may need to map
-  provider-specific roles before calling the governor.
+如果你的 Agent 曾经“摘要完就把关键路径弄丢了”，欢迎把最小复发案例发到 Issue。
 
-## Relation to other Nexcore open results
+## 与开放栈组合
 
-- [NexcoreVision](https://github.com/yan-stone-computer/NexcoreVision) handles
-  the visual-evidence branch: OCR and visual analysis become bounded text
-  evidence before entering this context budget.
-- [EchoMora](https://github.com/yan-stone-computer/EchoMora) explores layered,
-  auditable long-term memory and soft forgetting.
-- [TianShu2Markdown](https://github.com/yan-stone-computer/tianshu2markdown)
-  converts local documents into Markdown for agents.
-- [NexcoreWork](https://github.com/yan-stone-computer/nexcorework-site) is the
-  complete local-first agent workbench and product documentation.
-
-These projects share design principles, but each repository remains
-independently runnable and licensed.
+- [NexcoreMemory](https://github.com/yan-stone-computer/NexcoreMemory)
+- [NexcoreFileRead](https://github.com/yan-stone-computer/NexcoreFileRead)
+- [NexcoreVision](https://github.com/yan-stone-computer/NexcoreVision)
+- [NexcoreToolGuard](https://github.com/yan-stone-computer/NexcoreToolGuard)
+- [NexcoreAgent](https://github.com/yan-stone-computer/NexcoreAgent)
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT
