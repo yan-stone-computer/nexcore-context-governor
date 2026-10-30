@@ -8,7 +8,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933.svg)](https://nodejs.org/)
 [![Dependencies](https://img.shields.io/badge/runtime_dependencies-0-2563eb.svg)](package.json)
 
-![Four-block context governance](docs/context-governor.png)
+![Four-block context governance](https://raw.githubusercontent.com/yan-stone-computer/nexcore-context-governor/main/docs/context-governor.png)
 
 大多数 Agent 在上下文超限时直接截断。这个库会先预算、再降级、再核对关键事实，
 最后在请求不可能成功时明确拒绝执行。
